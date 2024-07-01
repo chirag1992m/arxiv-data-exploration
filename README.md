@@ -10,8 +10,8 @@ Instead of directly using ArXiv public API, I have instead chosen to use [Kaggle
 
 ## Explorations
 
-### Trend finding
+### Trend Exploration
 
 **Data**: To start with any notebook, you must download the dataset available on [Kaggle's website](https://www.kaggle.com/datasets/Cornell-University/arxiv/data) alongside the notebook.
 
-**Notebook**: [*arxiv_data_exploration.ipynb*](./arxiv_data_exploration.ipynb)
+**Notebook**: [*arxiv_data_exploration.ipynb*](./trend_exploration/arxiv_trend_exploration.ipynb)
