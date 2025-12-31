@@ -46,9 +46,13 @@ def fetch_2025_cs(email, base_name='cs_2025', records_per_file=50000):
     current_filename = f"{base_name}_part_{file_num}.jsonl"
     f_handle = open(current_filename, 'a', encoding='utf-8')
 
+    selected_fields = (
+        "id,doi,title,publication_date,primary_location,authorships,abstract_inverted_index,"
+        "primary_topic,topics,cited_by_count,referenced_works,open_access"
+    )
     params = {
         'filter': 'publication_year:2025,primary_topic.field.id:fields/17',
-        'select': 'id,doi,title,publication_date,primary_location,authorships,primary_topic,abstract_inverted_index,cited_by_count',
+        'select': selected_fields,
         'per-page': 200, 
         'cursor': cursor,
         'mailto': email
@@ -71,16 +75,48 @@ def fetch_2025_cs(email, base_name='cs_2025', records_per_file=50000):
                     total_available = data.get('meta', {}).get('count', 0)
 
                 for work in results:
-                    # [Author extraction logic here...]
-                    authors_data = [{'name': safe_get(a, 'author', 'display_name'), 
-                                     'affiliation': (a.get('institutions') or [{}])[0].get('display_name')} 
-                                    for a in work.get('authorships', [])]
+                    # 1. Extract and Deduplicate Geography
+                    # authorships.countries is a list of ISO codes like ["US", "DE"]
+                    countries = list(set(work.get('countries', []))) 
 
+                    # 2. Extract Authors with Institution Metadata
+                    authors_data = []
+                    for auth in work.get('authorships', []):
+                        # Get the primary institution details (OpenAlex usually puts the main one first)
+                        insts = auth.get('institutions', [])
+                        primary_inst = insts[0] if insts else {}
+                        
+                        authors_data.append({
+                            'name': safe_get(auth, 'author', 'display_name', default="Unknown"),
+                            'id': safe_get(auth, 'author', 'id'),
+                            'institution': primary_inst.get('display_name', "No Affiliation"),
+                            'inst_type': primary_inst.get('type', "unknown"), # e.g., 'company', 'education', 'government'
+                            'inst_country': primary_inst.get('country_code', "unknown")
+                        })
+
+                    # 3. Final Paper Object Construction
                     paper = {
+                        'id': work.get('id'),
+                        'doi': work.get('doi'),
                         'title': work.get('title'),
+                        'date': work.get('publication_date'),
                         'citations': work.get('cited_by_count', 0),
+                        
+                        # VENUE & ORIGIN
+                        'venue': safe_get(work, 'primary_location', 'source', 'display_name', default="Unknown Venue"),
+                        'venue_type': safe_get(work, 'primary_location', 'source', 'type', default="unknown"), # journal, conference, preprint
+                        
+                        # TOPIC ANALYSIS (The "Hot" Indicators)
+                        'primary_topic': safe_get(work, 'primary_topic', 'display_name', default="Unknown Topic"),
+                        'subfield': safe_get(work, 'primary_topic', 'subfield', 'display_name', default="Unknown Subfield"),
+                        'all_topics': [t.get('display_name') for t in work.get('topics', [])], # Full topic cluster
+                        
+                        # TREND METRICS
+                        'abstract': rebuild_abstract(work.get('abstract_inverted_index')),
                         'authors': authors_data,
-                        # ... other fields
+                        'countries': countries,
+                        'is_oa': safe_get(work, 'open_access', 'is_oa', default=False),
+                        'ref_count': len(work.get('referenced_works', [])), # Breadth of the literature review
                     }
                     
                     f_handle.write(json.dumps(paper) + '\n')
@@ -115,5 +151,5 @@ def fetch_2025_cs(email, base_name='cs_2025', records_per_file=50000):
         f_handle.close()
         print(f"\n\nDone! Final count: {total_collected}")
 
-# Start
-fetch_2025_cs("chirag.m@nyu.edu", records_per_file=5000)
+if __name__ == "__main__":
+    fetch_2025_cs("chirag.m@nyu.edu", records_per_file=10000)
